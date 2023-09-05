@@ -1,0 +1,8 @@
+.spyproject/
+
+images*
+
+thermometer_*/
+
+*.png
+
