@@ -1,16 +1,14 @@
 import cv2
 import numpy as np
-import sys
 
 from ultralytics import YOLO
 
+yolo_thermometer_detect = YOLO("thermometer_detect.pt")
+yolo_thermometer_read = YOLO("thermometer_read.pt")
+
 def run_yolo(mode:str,image:np.array):
-    if mode == "detect":
-        yolo = YOLO("thermometer_detect.pt")
-    elif mode == "read":
-        yolo = YOLO("thermometer_read.pt")
-    else:
-        raise Exception("mode 参数错误")
+    assert mode in ["detect","read"]
+    yolo = yolo_thermometer_detect if mode == "detect" else yolo_thermometer_read
     results = {}
     boxes = yolo(image)[0].boxes
     for i, xywh in enumerate(boxes.xywh):
@@ -28,6 +26,7 @@ def run_yolo_and_draw(mode:str,image:np.array):
         cv2.rectangle(image, left_up,right_down, (0,255,0),5)
     return results
 
+# 图像仿射变换
 def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
                     image:np.array, # 图像
                     pts_template, # 模版三点矩阵
@@ -49,14 +48,17 @@ def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
 
 # 倾斜校正
 def tilt_correct(image):
-    results = run_yolo("read", image)
-    if len(results) != 3:
+    detect_results = run_yolo("detect", image)
+    left_up,right_down = detect_results["0"][:2]
+    image = image[left_up[1]:right_down[1],left_up[0]:right_down[0]]
+    read_results = run_yolo("read", image)
+    if len(read_results) != 3:
         return
     pts = [0,0,0]
     for i in range(3):
         j = str(i)
-        pts[i] = ((results[j][0][0] + results[j][1][0]) // 2,
-             (results[j][0][1] + results[j][1][1]) // 2)
+        pts[i] = ((read_results[j][0][0] + read_results[j][1][0]) // 2,
+             (read_results[j][0][1] + read_results[j][1][1]) // 2)
     x = _transform_image((3000,3000),
                      image,
                      ((877, 2377), (1498, 1080), (2145, 1892)),
@@ -64,11 +66,8 @@ def tilt_correct(image):
     return x
 
 if __name__ == "__main__":
-    argv = sys.argv
-    assert len(argv) == 2,"请将第二个参数指定为需要进行倾斜校正的图片名称"
-    filename = argv[1]
-    x = cv2.imread(filename)
-    x = tilt_correct(x)
-    x = cv2.resize(x,(500,500))
-    cv2.imshow("x",x)
+    image = cv2.imread("./1.jpg")
+    image = tilt_correct(image)
+    image = cv2.resize(image,(500,500))
+    cv2.imshow("x",image)
     cv2.waitKey(0)
