@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+from sklearn.cluster import KMeans
 from ultralytics import YOLO
 
 yolo_thermometer_detect = YOLO("thermometer_detect.pt")
@@ -28,7 +29,11 @@ def run_yolo(mode:str,image:np.array):
             pts_image = ((data[:,:2] + data[:,2:]) / 2).astype(np.int16)
             return pts_image 
         case "read":
-            data = yolo_thermometer_read(image)[0].boxes.data
+            data = yolo_thermometer_read(image)[0].mask.data
+            positions = np.where(data.cpu().numpy() != 0)
+            center = KMeans(n_clusters=1).fit(positions).cluster_centers_ # 假设这是一个numpy数组
+            
+
             
 
 # 图像仿射变换
@@ -65,6 +70,7 @@ def main(image):
         pts_image
     )
     # read
+    run_yolo("read",image)
 
     return image
 
