@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import math
 
 from sklearn.cluster import KMeans
 from ultralytics import YOLO
@@ -13,18 +12,14 @@ get_mask_center = lambda mask : np.reshape(KMeans(n_clusters=1,n_init=10).fit(
     np.array(np.where(mask != 0)).transpose()[:,::-1]
 ).cluster_centers_,-1)
 
-def get_clockwise_angle(v1, v2):
+# 得到两个向量0-180°的夹角
+def gt_abs_angle(v1, v2):
     dot_product = np.dot(v1, v2)
     norm_v1 = np.linalg.norm(v1)
     norm_v2 = np.linalg.norm(v2)
-    cosine_angle = dot_product / (norm_v1 * norm_v2)
-    
-    if cosine_angle < -1:
-        cosine_angle = -1
-    elif cosine_angle > 1:
-        cosine_angle = 1
-
-    angle_rad = np.arccos(cosine_angle)
+    cos_angle = dot_product / (norm_v1 * norm_v2)
+    cos_angle = -1 if cos_angle < -1 else (1 if cos_angle > 1 else cos_angle)
+    angle_rad = np.arccos(cos_angle)
     angle_deg = np.degrees(angle_rad)
     return angle_deg
 
@@ -51,7 +46,8 @@ def run_yolo(mode:str,image:np.array):
             data = yolo_thermometer_read(image)[0].masks.data.cpu().numpy()
             if len(data) == 2:
                 temperature_pointer_mask,humidity_pointer_mask = data
-                if np.count_nonzero(temperature_pointer_mask) < np.count_nonzero(humidity_pointer_mask):
+                if np.count_nonzero(temperature_pointer_mask) < np.count_nonzero\
+                    (humidity_pointer_mask):
                     temperature_pointer_mask,humidity_pointer_mask = \
                         humidity_pointer_mask,temperature_pointer_mask
             else:
@@ -59,16 +55,29 @@ def run_yolo(mode:str,image:np.array):
 
             temperature_pointer_mask_center = get_mask_center(temperature_pointer_mask)
             ratio = np.array([3000,3000]) / np.array(temperature_pointer_mask.shape)
+
+            temperature_pointer_origin_vector = np.array([-663,613])
+            temperature_pointer_cartesian_vector = np.array([-613,-663])
+
             temperature_pointer_mask_center = temperature_pointer_mask_center * ratio
             temperature_pointer_center = np.array([1512,1616])
-            temperature_pointer_origin_vector = np.array([-663,613])
             temperature_pointer_vector = temperature_pointer_mask_center - temperature_pointer_center
-            temperature_pointer_angle = get_clockwise_angle(
-                temperature_pointer_origin_vector,
-                temperature_pointer_vector
-            )
-
-            return temperature_pointer_angle
+            
+            o_p = gt_abs_angle(temperature_pointer_origin_vector,temperature_pointer_vector)
+            c_p = gt_abs_angle(temperature_pointer_cartesian_vector,temperature_pointer_vector)
+            
+            if o_p < 90 and c_p < 90: # 0 - 90
+                print("case 1")
+                return o_p
+            elif o_p < 90 and c_p > 90: # 270 - 360
+                print("case 2")
+                return 360 - o_p
+            elif o_p > 90 and c_p < 90: # 90 - 180
+                print("case 3")
+                return o_p
+            elif o_p > 90 and c_p > 90: # 180 - 270
+                print("case 4")
+                return 360 - o_p
 
 # 图像仿射变换
 def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
@@ -105,8 +114,12 @@ def main(image):
     )
     # read
     angle = run_yolo("read",image)
+    print(f"angle:{angle}")
+    temperature = -25 + 53 / 180 * angle
 
-    return angle
+    return temperature
 
 if __name__ == "__main__":
-    pass
+    image = cv2.imread("./1694357518868.jpg")
+    angle = main(image)
+    print(f"temperature is {angle}")
