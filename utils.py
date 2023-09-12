@@ -14,13 +14,19 @@ get_mask_center = lambda mask : np.reshape(KMeans(n_clusters=1,n_init=10).fit(
 ).cluster_centers_,-1)
 
 def get_clockwise_angle(v1, v2):
-	x1,y1 = v1
-	x2,y2 = v2
-	dot = x2*x1+y2*y1
-	det = x2*y1-y2*x1
-	theta = np.arctan2(det, dot)
-	theta = theta if theta > 0 else 2*np.pi+theta
-	return math.degrees(theta)
+    dot_product = np.dot(v1, v2)
+    norm_v1 = np.linalg.norm(v1)
+    norm_v2 = np.linalg.norm(v2)
+    cosine_angle = dot_product / (norm_v1 * norm_v2)
+    
+    if cosine_angle < -1:
+        cosine_angle = -1
+    elif cosine_angle > 1:
+        cosine_angle = 1
+
+    angle_rad = np.arccos(cosine_angle)
+    angle_deg = np.degrees(angle_rad)
+    return angle_deg
 
 def run_yolo(mode:str,image:np.array):
     match mode:
@@ -43,40 +49,26 @@ def run_yolo(mode:str,image:np.array):
             return pts_image 
         case "read": # 检测表针,返回角度
             data = yolo_thermometer_read(image)[0].masks.data.cpu().numpy()
-            temperature_pointer_mask,humidity_pointer_mask = data
+            if len(data) == 2:
+                temperature_pointer_mask,humidity_pointer_mask = data
+                if np.count_nonzero(temperature_pointer_mask) < np.count_nonzero(humidity_pointer_mask):
+                    temperature_pointer_mask,humidity_pointer_mask = \
+                        humidity_pointer_mask,temperature_pointer_mask
+            else:
+                temperature_pointer_mask = data[0]
 
-            if np.count_nonzero(temperature_pointer_mask) < np.count_nonzero(humidity_pointer_mask):
-                temperature_pointer_mask,humidity_pointer_mask = \
-                    humidity_pointer_mask,temperature_pointer_mask
-
-            temperature_pointer_mask_center,humidity_pointer_mask_center = \
-                get_mask_center(temperature_pointer_mask),get_mask_center(humidity_pointer_mask)
-            
+            temperature_pointer_mask_center = get_mask_center(temperature_pointer_mask)
             ratio = np.array([3000,3000]) / np.array(temperature_pointer_mask.shape)
-
             temperature_pointer_mask_center = temperature_pointer_mask_center * ratio
-            humidity_pointer_mask_center = humidity_pointer_mask_center * ratio
-
             temperature_pointer_center = np.array([1512,1616])
-            humidity_pointer_center = np.array([1524,2348])
-
             temperature_pointer_origin_vector = np.array([-663,613])
-            humidity_pointer_origin_vector = np.array([-355,158])
-
             temperature_pointer_vector = temperature_pointer_mask_center - temperature_pointer_center
-            humidity_pointer_vector = humidity_pointer_mask_center - humidity_pointer_center
-
             temperature_pointer_angle = get_clockwise_angle(
                 temperature_pointer_origin_vector,
                 temperature_pointer_vector
             )
 
-            humidity_pointer_angle = get_clockwise_angle(
-                humidity_pointer_origin_vector,
-                humidity_pointer_vector
-            )
-
-            return temperature_pointer_angle,humidity_pointer_angle
+            return temperature_pointer_angle
 
 # 图像仿射变换
 def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
@@ -112,13 +104,9 @@ def main(image):
         pts_image
     )
     # read
-    centers = run_yolo("read",image)
+    angle = run_yolo("read",image)
 
-    return image
+    return angle
 
 if __name__ == "__main__":
-    read_image = cv2.imread("./read.png")
-    print("----------")
-    print(run_yolo("read",read_image))
-    cv2.imshow("image",read_image)
-    cv2.waitKey(0)
+    pass
