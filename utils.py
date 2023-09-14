@@ -25,11 +25,12 @@ def gt_abs_angle(v1, v2):
 
 def run_yolo(mode:str,image:np.array):
     match mode:
-        case "detect": # 检测仪表,返回切片
+        case "detect": # 检测仪表,返回xyxy坐标
             data = yolo_thermometer_detect(image)[0].boxes.data
             if len(data) == 0:
                 return
-            return data[0,:4].reshape(-1,2).transpose(0,1).cpu().numpy().astype(np.int16)
+            positions = data[0,:4].reshape(-1,2).cpu().numpy().astype(np.int16)
+            return positions
         case "correct": # 检测特征点,返回图像三点矩阵
             data = yolo_thermometer_correct(image)[0].boxes.data
             if len(data) == 0 or len(data) != 3:
@@ -53,31 +54,22 @@ def run_yolo(mode:str,image:np.array):
             else:
                 temperature_pointer_mask = data[0]
 
+            image_shape = np.array(image.shape[:2])
+            mask_shape = np.array(temperature_pointer_mask.shape)
+            template_shape = np.array([3000,3000])
+
+            image_mask_ratio = image_shape / mask_shape
+            image_template_ratio = image_shape / template_shape
+
             temperature_pointer_mask_center = get_mask_center(temperature_pointer_mask)
-            ratio = np.array([3000,3000]) / np.array(temperature_pointer_mask.shape)
-
-            temperature_pointer_origin_vector = np.array([-663,613])
-            temperature_pointer_cartesian_vector = np.array([-613,-663])
-
-            temperature_pointer_mask_center = temperature_pointer_mask_center * ratio
             temperature_pointer_center = np.array([1512,1616])
-            temperature_pointer_vector = temperature_pointer_mask_center - temperature_pointer_center
             
-            o_p = gt_abs_angle(temperature_pointer_origin_vector,temperature_pointer_vector)
-            c_p = gt_abs_angle(temperature_pointer_cartesian_vector,temperature_pointer_vector)
-            
-            if o_p < 90 and c_p < 90: # 0 - 90
-                print("case 1")
-                return o_p
-            elif o_p < 90 and c_p > 90: # 270 - 360
-                print("case 2")
-                return 360 - o_p
-            elif o_p > 90 and c_p < 90: # 90 - 180
-                print("case 3")
-                return o_p
-            elif o_p > 90 and c_p > 90: # 180 - 270
-                print("case 4")
-                return 360 - o_p
+            temperature_pointer_mask_center = temperature_pointer_mask_center * image_mask_ratio
+            temperature_pointer_center = temperature_pointer_center * image_template_ratio
+
+            cv2.circle(image,temperature_pointer_mask_center.astype(np.int16),10,(0,255,0),-1)
+            cv2.circle(image,temperature_pointer_center.astype(np.int16),10,(0,0,255),-1)
+
 
 # 图像仿射变换
 def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
@@ -88,7 +80,7 @@ def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
     pts_image = np.float32(pts_image)
     pts_template = np.float32(pts_template)
 
-    assert pts_image.shape == (3,2) and pts_template.shape == (3,2)
+    assert pts_image.shape == (3,2) and pts_template.shape == (3,2),"未识别到完整特征点"
     assert len(template_shape_2d) == 2
 
     trans = cv2.getAffineTransform(pts_image,pts_template)
@@ -102,9 +94,10 @@ def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
 
 def main(image):
     # detect
-    ROI_slices = run_yolo("detect", image)
-    image = image[ROI_slices[0,0]:ROI_slices[0,1],
-                  ROI_slices[1,0]:ROI_slices[1,1]]
+    positions = run_yolo("detect", image)
+    assert positions is not None,"未检测到仪表盘"
+    pt1,pt2 = positions
+    image = image[pt1[1]:pt2[1],pt1[0]:pt2[0]]
     # correct
     pts_image = run_yolo("correct", image)
     image = _transform_image(
@@ -113,13 +106,18 @@ def main(image):
         pts_image
     )
     # read
-    angle = run_yolo("read",image)
-    print(f"angle:{angle}")
-    temperature = -25 + 53 / 180 * angle
-
-    return temperature
+    res = run_yolo("read", image)
+    
+    return image
 
 if __name__ == "__main__":
-    image = cv2.imread("./1694357518868.jpg")
-    angle = main(image)
-    print(f"temperature is {angle}")
+    try:
+        cap = cv2.VideoCapture(0)
+        ret,frame = cap.read()
+        res = main(frame)
+        res = cv2.resize(res, (500,500))
+        cv2.imshow("win", res)
+        cv2.waitKey(0)
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
