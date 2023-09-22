@@ -1,12 +1,23 @@
 import cv2
 import numpy as np
+import os
 
 from sklearn.cluster import KMeans
 from ultralytics import YOLO
 
-yolo_thermometer_detect = YOLO("thermometer_detect.pt")
-yolo_thermometer_correct = YOLO("thermometer_correct.pt")
-yolo_thermometer_read = YOLO("thermometer_read.pt")
+yolo_thermometer_detect = None
+yolo_thermometer_correct = None
+yolo_thermometer_read = None
+
+def load_pt(mode,pt_path):
+    global yolo_thermometer_detect,yolo_thermometer_correct,yolo_thermometer_read
+    match mode:
+        case "detect":
+            yolo_thermometer_detect = YOLO(pt_path)
+        case "correct":
+            yolo_thermometer_correct = YOLO(pt_path)
+        case "read":
+            yolo_thermometer_read = YOLO(pt_path)
 
 get_mask_center = lambda mask : np.reshape(KMeans(n_clusters=1,n_init=10).fit(
     np.array(np.where(mask != 0)).transpose()[:,::-1]
@@ -56,20 +67,46 @@ def run_yolo(mode:str,image:np.array):
 
             image_shape = np.array(image.shape[:2])
             mask_shape = np.array(temperature_pointer_mask.shape)
-            template_shape = np.array([3000,3000])
+            template_shape = np.array([500,500])
 
             image_mask_ratio = image_shape / mask_shape
             image_template_ratio = image_shape / template_shape
 
             temperature_pointer_mask_center = get_mask_center(temperature_pointer_mask)
-            temperature_pointer_center = np.array([1512,1616])
+            temperature_pointer_center = np.array([250,250])
+            temperature_pointer_origin_center = np.array([142,361])
             
             temperature_pointer_mask_center = temperature_pointer_mask_center * image_mask_ratio
             temperature_pointer_center = temperature_pointer_center * image_template_ratio
+            temperature_pointer_origin_center = temperature_pointer_origin_center * image_template_ratio
 
+            
             cv2.circle(image,temperature_pointer_mask_center.astype(np.int16),10,(0,255,0),-1)
             cv2.circle(image,temperature_pointer_center.astype(np.int16),10,(0,0,255),-1)
-
+            
+            cv2.line(image,temperature_pointer_center.astype(np.int16),
+                     temperature_pointer_mask_center.astype(np.int16),
+                     (0,255,0),10)
+            cv2.line(image,temperature_pointer_center.astype(np.int16),
+                     temperature_pointer_origin_center.astype(np.int16),
+                     (0,255,0),10)
+            
+            pointer_vector = temperature_pointer_mask_center - temperature_pointer_center
+            pointer_origin_vector = temperature_pointer_origin_center - temperature_pointer_center
+            pointer_vertical_vector = np.array([-666,-648])
+            
+            
+            a = gt_abs_angle(pointer_origin_vector, pointer_vector)
+            b = gt_abs_angle(pointer_vertical_vector, pointer_vector)
+            
+            if a >= 90 and b >= 90:
+                x = 360 - a
+            elif (a >= 90 and b <= 90) or (a <= 90 and b <= 90):
+                x = a
+            
+            angle =  x / 180 * 55 + (-25)
+            
+            return angle
 
 # 图像仿射变换
 def _transform_image(template_shape_2d:tuple, # 模版2d尺寸
@@ -107,8 +144,8 @@ def main(image):
     )
     # read
     res = run_yolo("read", image)
-    
-    return image
+
+    return res
 
 if __name__ == "__main__":
     try:
@@ -116,6 +153,7 @@ if __name__ == "__main__":
         ret,frame = cap.read()
         res = main(frame)
         res = cv2.resize(res, (500,500))
+        cv2.imwrite("res.png", res)
         cv2.imshow("win", res)
         cv2.waitKey(0)
     finally:
