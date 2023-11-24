@@ -11,3 +11,9 @@ thermometer_*/
 *.ipynb
 
 *.pkl
+
+.vscode/
+
+.idea/
+
+test*
