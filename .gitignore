@@ -2,7 +2,7 @@
 
 images*
 
-thermometer_*/
+__pycache__/
 
 *.png
 

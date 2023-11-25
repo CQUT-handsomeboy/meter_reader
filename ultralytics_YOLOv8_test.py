@@ -9,7 +9,7 @@ yolo_thermometer_correct = None
 yolo_thermometer_read = None
 
 
-def load_pt(mode: str, pt_path: str) -> None:
+def load_model(mode: str, pt_path: str) -> None:
     """根据模式加载模型文件
 
     Args:
@@ -183,7 +183,7 @@ def _transform_image(
     pts_template,
     pts_image,
 ) -> np.array:
-    """_summary_
+    """图像放射变换
 
     Args:
         template_shape_2d (tuple): 模版2d尺寸
