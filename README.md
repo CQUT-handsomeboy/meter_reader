@@ -1,4 +1,26 @@
-# 项目流程
+# Qucik Start
+
+```shell
+git clone https://github.com/CQUT-handsomeboy/meter_reader.git
+pip3 install -r requirements.txt
+python3 main.py path/to/your/target/image ./LFS/thermometer_detect.pt ./LFS/tilt_correct.pt ./LFS/thermometer_read.pt
+```
+
+# 项目流程(第三版)
+
+- 使用YOLOv8检测出仪表盘ROI。
+
+- 对仪表盘ROI再次使用YOLOv8检测出三个特征点。
+
+- 对检测出的三个特征点运用仿射变换进行倾斜矫正。
+
+- 对倾斜校正后的仪表盘ROI再次使用YOLOv8检测出表针ROI。
+
+- 取表针ROI中心，与`Standard图像`（即放射变换目标矩阵的原图像）中的指针中心作差得到表针向量。
+
+- 将表针向量与`Standard图像`中的起始指针向量计算夹角，换算得到仪表读数。
+
+# 项目流程(第二版)
 
 - 使用*YOLOv8*检测出**仪表盘ROI**和**表盘种类**
 
@@ -22,7 +44,7 @@
 
 - 根据YOLOv8识别出的**表盘种类**，得出相应读数
 
-# 项目流程(old)
+# 项目流程(第一版)
 
 - 通过YOLOv3实现对表盘的分类
 
@@ -38,7 +60,7 @@
 
 - 结合表盘分类实现读表
 
-# 参考资料(old)
+# 参考资料(第一版)
 
 [通过透视变换进行椭圆矫正](https://blog.csdn.net/weixin_49578216/article/details/117700851?spm=1001.2014.3001.5502)
 
