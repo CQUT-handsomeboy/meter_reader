@@ -1,4 +1,4 @@
-# Qucik Start
+# Quick Start
 
 ```shell
 git clone https://github.com/CQUT-handsomeboy/meter_reader.git
